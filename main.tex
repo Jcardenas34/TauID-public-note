@@ -1,0 +1,323 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+
+\title{Release 22 TauID public note}
+\author{Juan Cardenas}
+\date{March 2022}
+\label{sec:rnnid}
+\begin{document}
+
+
+
+\maketitle
+
+\section{Introduction}
+The Tau is often the decay product of theoretical particles that if found will be direct evidence of physics beyond the Standard Model. Thus it is important that the ATLAS experiment develop a way to reliably identify these taus. The tau ($\tau$) is the heaviest lepton in the standard model at a mass of 1.777 GeV and has leptonic decay mode ($\tau \rightarrow l \nu_l, l=\mu,e$) in which the tau decays to a lighter lepton and its corresponding neutrino in a particle anti-particle pair. The tau also has a hadronic decay mode where the tau emits a collimated spray of particles known as a jet, ($\tau \rightarrow \nu_\tau hadrons$). Within the past 5 years, the ATLAS Tau Working Group has transitioned from using Boosted Decision Trees (BDTs), to more sophisticated algorithms such as Recurrent Neural Networks (RNNs) and Deepset Neural Networks to identify tau jets from jets originating from quark or gluons.
+
+
+Hadronic Tau decays can be classified as either 1 prong, 2 prong or 3 prong, depending on the number of charged pions that are reconstructed in their decay. 2 prong jets, being the result of incorrectly reconstructed 1 prong or 3 prong jets. At present, the TauWG uses 3 specialized Recurrent Neural Networks to classify 1, 2 and 3 prong jet objects from background jets of the same prongness. This note presents the performance of these specialized RNNs and the differences and improvements made when tuning the networks in preparation for Athena Release 22. This not also describes the major changes between the Release 21 and 22 TauID which include, changes to the selections for the training and testing data sets in section [2], Changes to the architecture used to train the networks, namely the Deepset network in section[3], changes in the variables used to train the networks in section [4] and the addition of a specialized 2 prong network to classify mis-reconstructed 1p and 3p taus described in section[5].
+
+
+
+\section{Training and Evaluation}
+\label{data selections}
+ Training the TauID with examples from a range of jets with characteristics as similar as possible to those it will encounter when evaluating jets derived from real data, is critical in estimating its performance in a real world scenario. As time progresses, our modeling and simulation practices improve and we gain the opportunity to expand the boundaries that were previously set when determining the selections for our training and testing sets. The following section describes the selections applied to the signal/background training and testing sets that were used to train the networks, and how they are different from those used in Release 21.
+
+\subsection{Signal and Background Selection Definitions}
+The selections places on the signal samples, composed of tau candidates from the process $\gamma^* \rightarrow \tau\tau$ are defined below:\newline
+
+The Tau Candidate must have a reconstructed $|\eta| < 2.5 $ and a $p_t > 15 GeV$ as well as truth matched values for $|\eta|, p_t$. They must also have a reconstructed prongness of 1, 2 or 3, a $truthParticleType==10$ and a $truthProng$ value of either 1 or 3. These tau candidates must also have a $p_t < 3.2 TeV$, $p_t < 3.0 TeV$ or $p_t < 2.6 TeV$ for jets reconstructed as a 1p, 2p or 3p tau respectively. The upper limit on the tau $p_t$ was placed so that the signal and background samples have large enough statistics over the same pt spectrum to allow for proper reweighting as defined in section \ref{reweighting procedure}.\newline
+
+The selections placed on the Background Di-Jet samples are defined below: \newline
+The Di-jet candidates must have a reconstructed $|\eta| < 2.5 $, a $p_t > 15 GeV$, a reconstructed prongness of 1, 2 or 3, and a $p_t < 3.2 TeV$, $p_t < 3.0 TeV$ or $p_t < 2.6 TeV$ when reconstructed as a 1p, 2p or 3p jet respectively. Again, the upper limit on the tau $p_t$ was placed so that the signal and background samples had large enough statistics over the same pt spectrum allow for proper reweighting as defined in section \ref{reweighting procedure}.
+
+These training region definitions are different from Release 21 training region definitions in that the $p_t$ of the jets has been changed from $p_t > 20 GeV$ to $p_t > 15 GeV$ and the eta range is expanded to include the crack region of ATLAS, $1.37 < |\eta| < 1.52$ 
+
+\subsection{Monte Carlo Training and Evaluation Samples}
+\label{MC samples}
+The signal and background xAOD data sets that were used to train and evaluate the networks were produced via Monte Carlo simulation in 2020 at an energy of 13TeV (mc20\_13TeV) and are shown below.\newline
+
+The signal data set used to train and evaluate the networks is \newline
+% \begin{flushleft}
+\scriptsize\[mc20\_13TeV.425200.Pythia8EvtGen\_A14NNPDF23LO\_Gammatautau\_MassWeight.recon.AOD.e5468\_s3674\_r13224\]
+% \end{flushleft}
+
+\normalsize The background data sets used to train and evaluate the networks are
+
+\scriptsize\[mc20\_13TeV.364701.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ1WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364702.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ2WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364703.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ3WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364704.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ4WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364705.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ5WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364706.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ6WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364707.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ7WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364708.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ8WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364709.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ9WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364710.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ10WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364711.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ11WithSW.recon.AOD.e7142\_s3681\_r13144\]
+\scriptsize\[mc20\_13TeV.364712.Pythia8EvtGen\_A14NNPDF23LO\_jetjet\_JZ12WithSW.recon.AOD.e7142\_s3681\_r13144\]\newline
+
+\subsection{Creation of the Training and testing sets}
+\label{training and testing sets}
+\normalsize In order for this data to interface with the Keras Neural Network API, these xAODs go through a series of skimming, slimming and conversion steps. The THOR (Tau Harmonization and Optimization Resources) framework is used to convert the xAODs to MxAODs which select and store the relevant jet variables needed for training. These MxAODs are then skimmed further and converted to a flattened Ntuple format, after which they are converted to HDF5 format where the selections in section [\ref{data selections}] are applied. These selections split the data into 1p, 2p and 3p signal and background training and testing sets. Each signal and background data set was split into testing and training sets with a  50/50 ratio, where 10\% of the testing set is used to validate the performance of the network as training is ongoiong. The training and testing sets are split according to their MC event number as follows.
+\begin{center}
+TRAIN\_SEL="TauJets.mcEventNumber \% 2 == 0"\newline
+TEST\_SEL="TauJets.mcEventNumber \% 2 == 1"\newline
+\end{center}
+
+All jets with an even MC event number were placed into the training data set, and all jets with an odd MC event number were placed into a testing data set. For example, in the 1p case, data sets of the following kind were produced:
+
+\begin{center}
+sig1P\_test\_\%d.h5, bkg1P\_test\_\%d.h5\newline
+sig1P\_train\_\%d.h5, bkg1P\_train\_\%d.h5\newline 
+\end{center}
+
+Below is a table of the size of the training and testing sets for the networks, where 1GB is approximately equal to 1 Million Jets.
+
+\begin{table}[!h]
+\centering
+\begin{tabular}{||c c c||c c c ||}
+\hline
+Network/Training data & Signal & Background & Network/Testing data & Signal & Background\\ [0.5ex] 
+ \hline\hline
+1p & 5.2 GB & 11.1 GB & 1p & 5.2 GB & 11.1 GB\\
+\hline
+2p & 469 MB & 13.9 GB & 2p & 469 MB & 13.9 GB \\
+\hline
+3p & 1.4 GB & 16.5 GB & 3p & 1.4 GB & 16.5 GB \\ [1ex] 
+ \hline
+\end{tabular}
+\caption{ Network Training Data Distributions}
+\label{table:Network Training Data Distribution}
+\end{table}
+
+\subsection{Re-weighting procedure}
+\label{reweighting procedure}
+Earlier versions of the TauID included a pt re-weighting procedure where the background data set (typically larger than the signal sample) was used to determine a set of pt bins ranging from 15GeV to 10TeV, where 2\% of the data in the background data set was contained in each bin. The signal sample was then plotted in a histogram with the bins defined above. The ratio of the number of signal jets to background jets in each bin is defined as the background weight. Each signal jet is given a weight of 1, and each background jet gets a weight according to the pt bin that it corresponds to when plotted. This weight assignment allows the network to take into account the discrepancy in the size of the signal and background training data sets and helps to eliminate any biasing in the performance that may arise from a difference in the pt distribution of the training and testing sets. In Release 22, each individual jet weight is also multiplied by the BeamSpotWeight of each jet.
+
+
+
+
+
+\section{TauID Network architectures} \label{TauID Network architectures}
+\subsection{Recurrent Neural Network Architecture}
+\label{Recurrent Neural Network Architecture}
+The Recurrent Neural Network (RNN) Architecture has 3 input branches, one for track variables, one for cluster variables and one for high level jet variables as illustrated in figure 1 below.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[scale=.35]{images/RNN_dot.png}
+\caption{RNN Architecture}
+\label{fig:RNN_Architecture}
+\end{figure}
+
+The RNN architecture allows us to retain the linked relationship between each track and each cluster with its jet object. This is done by passing in the track and cluster information to the network as sequence data. Given that there can be multiple tracks and clusters for any jet, each array of tracks and clusters must be passed to the network as sequence data, otherwise valuable information about a given jet could be lost. This sequence data is run through two shared dense layers followed by two Long Short Term Memory (LSTM) layers, for which the RNN architecture gets its name. Because there was no seemly significant physical reason to feed the track and cluster information to the network in any particular order, the information is passed to the network in the arbitrary order of decreasing transverse momentum $P_t$, and transverse energy $E_t$ respectively.
+ 
+\subsection{The Deepset Architecture}
+The true difference between the Deepset architecture and the RNN architecture, is in how they handle sequence data. As stated above, the RNN architecture allows us to retain the linked relationship between the tracks and clusters that are created by a single jet. But a RNN is most effective in situations where the order of the sequence data passed to it is important, such as in natural language processing. In instances where the order of the sequence data is irrelevant, which we believe to be the case with our data, a Deepset Architecture is thought to be more effective. The Deepset Architecture gets its name from the Deepset layers, also called Sum Layers that it employs. A graphical representation of the Deepset  architectures is given below.
+
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[scale=.30]{images/Deepset_dot.png}
+% \caption{Deepset Architecture}
+% \label{fig:Deepset Architecture}
+% \end{figure}
+
+Effectively, every LSTM layer in the RNN is replaced with a SumLayer followed by two dense layers. The function of the SumLayer is to sum the latent representation of the sequence data that is passed to it, so that it then becomes a single 1D array. This 1 dimensional array is then passed through a few more densely connected layers before a classification is made. The elimination of the LSTM layers significantly reduces the complexity of the network, leading to a significant reduction in the number of calculations necessary to train the network. This, along with a reduction in the number of trainable parameters in the network, theoretically reduces the amount of time needed to train. In terms of effectiveness of background rejection when compared to the RNN architecture, there is a theorem called the "Deepset Theorem"\cite{Komiske_2019} that predicts the existence of a particular arrangement of network layers before and after the SumLayer, that can yield similar or better results when compared to the RNN.  
+
+
+\section{Network Input Variables}
+The Tau Identification networks use a range of high and low level variables to classify jets. Low level variables include track and cluster information from the associated jets that are to be classified, such as the angular separation of the tracks from the center of the jet cone $d\eta , d\phi$ and the second moments of the radial and longitudinal distance of a cluster from the cluster center $r^{2}_{cluster}$ and $\lambda^{2}_{cluster}$. A full list of the variables used to train the 1p, 2p and 3p networks and their definitions are below.
+
+\begin{description}
+    \item High Level Jet Variables:
+    \item[Central energy fraction ($cent\_frac$):] Fraction of transverse energy at EM scale deposited in the region $\Delta R <0.1$ with respect to all energy deposited in $\Delta R<0.2$ around the $\tau_{had-vis}$ candidate axis calculated by summing the energy deposited in all cells with a barycentre in these regions. The calorimeter cells are required to be part of a TopoCluster belonging to the $\tau_{had-vis}$ candidate.
+
+    \item[Inverse momentum fraction of the leading track (etOverPtLeadTrk)]: The transverse energy sum, calibrated at the EM energy scale, deposited in all cells belonging to TopoClusters in the core region, divided by the transverse momentum of the highest-$p_t$ core track of the $\tau_{had-vis}$ candidate.
+
+    \item[Maximum track (dRmax)]: The maximum $\Delta R$ between a core track associated with the $\tau_{had-vis}$ candidate and the $\tau_{had-vis}$ direction.
+
+    \item[Momentum fraction of isolation tracks (SumPtTrkFrac)]: Scalar sum of the $p_t$ of isolation tracks associated with the $\tau_{had-vis}$ candidate divided by the sum of the pT of all the associated core and isolation tracks.
+
+    \item[Ratio of EM energy and track momentum (EMPOverTrkSysP)]: Ratio of the sum of cluster energy deposited in the electromagnetic part of the TopoClusters (pre-sampler, first and second layers of the LAr calorimeter) to the sum of the momentum of core tracks. Clusters are calibrated at the LC energy scale.
+
+    \item[Fraction of track-plus-EM-system pT (ptRatioEflowApprox)]: Ratio of the $\tau_{had-vis}$ $p_t$, estimated using the vector sum of core track momenta and up to two most energetic EM clusters in the core region to the calorimeter-only measurement of $\tau_{had-vis}$ $p_t$.
+
+    \item[Mass of the track-plus-EM-system (mEflowApprox)]: Invariant mass of the system composed of the core tracks and up to two most energetic EM clusters in the core region, where EM cluster energy is the part of TopoCluster energy deposited in the presampler and first two layers of the LAr calorimeter, and the four-momentum of an EM cluster is calculated assuming zero mass and using TopoCluster seed direction.
+
+    \item[Jet Momentum (pt\_tau\_log)]: The $log_{10}$ of the momentum $p_t$, in GeV of the $\tau_{had-vis}$ candidate 
+    
+    \item[Mass of the track system (massTrkSys)] : Invariant mass calculated from the sum of the four-momenta of all core and isolation tracks, assuming a pion mass for each track
+    
+    \item[Transverse flight path significance (trFlightPathSig)]: The decay length of the secondary vertex in the transverse  plane, calculated with respect to the tau vertex, divided by its estimated uncertainty
+    
+    
+\end{description}
+
+
+
+\begin{description}
+
+    \item Track Variables:     
+
+    \item[Track momentum (pt\_log)]: The $Log_{10}$ of each associated jet track on the GeV scale
+
+    \item[Jet Momentum (pt\_tau\_log)] : The $Log_{10}$ on the GeV scale of the $\tau_{had-vis}$ candidate to correlate to each track
+
+    \item[Angular distance in $\eta$ (dEta)]: The angular distance of the track to the $\tau_{had-vis}$ candidate in $\eta$
+
+    \item[Angular distance in $\phi$ (dPhi)]: The angular distance of the track to the $\tau_{had-vis}$ candidate in $\phi$
+
+    \item[Pixel hits to the inner most detector (nInnermostPixelHits)] : The number of hits on the track in the inner most Si pixel detector layer
+
+    \item[Pixel hits to other detector layers (nPixelHits)]: The number of hits on the track in the Si pixel detector layers other than the inner most layer
+
+    \item[Pixel Hits to Microstrip (nSCTHits)]: The number of hits on the track in the micro-strip detector layers
+    
+    \item[(z0sinthetaTJVA)]:
+
+    \item[(z0sinthetaSigTJVA)]:
+
+    \item[(d0TJVA)]:
+
+    \item[(d0SigTJVA)]:
+    
+\end{description}
+
+
+\begin{description}
+    
+    \item Cluster Variables:
+    \item[Cluster energy (et\_log)]: The $Log_{10}$ of each associated jet cluster
+
+    \item[Jet momentum (pt\_tau\_log)]: The $Log_{10}$ on the GeV scale of the $\tau_{had-vis}$ candidate to correlate to each cluster
+
+    \item[Angular distance in $\eta$ (dEta)]: The angular distance of the cluster to the $\tau_{had-vis}$ candidate in $\eta$
+
+    \item[Angular distance in $\phi$ (dPhi)]: The angular distance of the cluster to the $\tau_{had-vis}$ candidate in $\phi$
+
+    \item[Radial cluster extension (SECOND\_R)]: Second moment of the radial distance of cluster cells from the cluster axis.
+
+    \item[Longitudinal cluster extension (SECOND\_LAMBDA)]: Second moment of the longitudinal distance of cluster cells from the cluster barycentre, along the cluster axis.
+
+    \item[Cluster depth (CENTER\_LAMBDA)]: The distance of the cluster barycentre from the calorimeter front face, determined along the cluster axis.
+
+\end{description}
+
+
+Notably the following variables were introduced to the Release 22 TauID training variable set: z0sinthetaTJVA, z0sinthetaSigTJVA, d0TJVA, d0SigTJVA and pt\_tau\_log for both the track and cluster variable set
+
+
+\begin{table}[h!]
+  \caption{Training variables used for the 1p 2p and 3p networks for Release 22.}%
+  \label{tab:tauid_net_vars_table}
+  \centering
+  \begin{tabular}{||llll||}
+%   \toprule
+  \hline
+  Variable & 1 prong & 2 prong & 3 prong \\
+%   \midrule
+  \hline
+  \texttt{Jet Variables} & & & \\
+  \hline
+  \texttt{TauJets/centFrac}         & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/etOverPtLeadTrk}  & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/dRmax}            & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/SumPtTrkFrac}     & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/EMPOverTrkSysP}   & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/ptRatioEflowApprox} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/mEflowApprox} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/pt\_tau\_log} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/massTrkSys}   &           & $\bullet$ & $\bullet$ \\
+  \texttt{TauJets/trFlightPathSig} &        & $\bullet$ & $\bullet$ \\
+  \hline
+  \texttt{Track Variables} & & & \\
+  \hline
+  \texttt{TauTracks/pt\_log} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/pt\_tau\_log} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/dEta} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/dPhi} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/nInnermostPixelHits} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/nPixelHits} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/nSCTHits} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/z0sinthetaTJVA} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/z0sinthetaSigTJVA} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/d0TJVA} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauTracks/d0SigTJVA} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \hline
+  \texttt{Cluster Variables} & & & \\
+  \hline
+  \texttt{TauClusters/et\_log} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauClusters/pt\_tau\_log} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauClusters/dEta} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauClusters/dPhi} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauClusters/SECOND\_R} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauClusters/SECOND\_LAMBDA} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \texttt{TauClusters/CENTER\_LAMBDA} & $\bullet$ & $\bullet$ & $\bullet$ \\
+  \hline
+%   \bottomrule
+  \end{tabular}
+  % }
+\end{table}
+
+\newpage
+
+
+
+\section{Tau Identification Performance}
+Once the Tau ID networks are trained, they are then evaluated on a test data set that contains $O(10^7)$ jets. These evaluated jets are then given a score from 0 to 1 indicating their probability of either being signal or background like, a score of 1 being a signal like jet and a score of 0 being a background like jet, these outputted scores are called the raw scores and referred to as their RNNJetScore. The RNNJetScores for the tau jet candidates is then transformed to be uniform across its range from 0 to 1, and is called the RNNJetScoreSigTrans. These RNNJetScoreSigTrans scores 
+
+The plots below show the rejection of fake tau candidates in a ROC rejection curve defined using the inverse of the background efficiency using the flattened RNNJetScores (RNNJetScoreSigTrans).
+
+
+\subsection{1p Network}
+The 1p TauID is solely responsible to classifying jets with a single charged track.
+
+
+\subsection{2p Network} \label{2p Network}
+In the reconstruction process to determine the prongness of any particular jet, 1 prong or 3 prong jets can at times become mis-reconstructed as 2 prong jet objects. This mis-reconstruction is due to a number of reasons unique to original prongness of the tau. In the case of 1p taus, conversion tracks from electrons in the neutral pion decay of a tau can be registered as a track belonging to a charged pion. In the 3 prong tau case one of the 3 tracks in the jet is rejected by the MVA track selection, or two of the three tracks are merged and disguised as a single track. The plots below show how often 1p and 3p truth tau jets used in this analysis are mis-reconstructed as 2p jet objects. These jets have a very wide distribution in $P_t$, starting from 15GeV to slightly above 3.5TeV. From these plots, it is apparent that 1p and 3p truth jets are incorrectly reconstructed as 2p jets a non-negligible percentage of time, most notably in the 3p case yielding a mis-reconstruction rate of approximately 20\%. And so, the plots below demonstrate a clear need to develop a specialized neural network to properly differentiate 2p jets as either signal or background. 
+
+
+
+\begin{figure}[h!]
+\centering
+\includegraphics[scale=.68]{nTracks_distribution_of_1p.png}
+\includegraphics[scale=.65]{nTracks_distribution_of_3p.png}
+\caption{1 and 3 prong tau candidates reconstructed as 2 prong}
+\label{fig:true prong distributions}
+\end{figure}
+
+\newpage
+
+\subsection{2p Network Results RNN}\label{2p Network Results RNN}
+The 2 prong TauID is used to classify mis-reconstructed 1 and 3p prong jets that have been reconstructed as 2 prong. This network was implemented in Release 22 and is a major change from the method used to classify 2p jets in Release 21, where the 3p RNN to classify 2p jets. Although the 3p network performed decently well when classifying 2p jets, creating a specialized 2p network was predicted to yield a significant improvement in terms of background rejection, and it has. Below are the results of the specialized 2p RNN network.
+
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[scale=.9]{images/roc_raw_2P_decaymode_inclusive_Comparison.png}
+% \includegraphics[scale=.9]{images/2p_ratio.png}
+% \caption{ 2p RNN Network vs 3p RNN Inclusive Network}
+% \label{fig:2p RNN Network vs 3p RNN Inclusive Network}
+% \end{figure}
+
+
+
+% \begin{figure}[h!]
+% \centering
+% \includegraphics[scale=.9]{images/roc_2p_rnn_vs_deepset.png}
+% \caption{ 2p RNN Network vs 2p Deepset Network}
+% \label{fig:2p RNN Network vs 2p Deepset Network}
+% \end{figure}
+
+\subsection{3p Network}
+The 3 prong TauID is used to classify any jets that have a charged track count of 3 or above.
+
+
+\section{Conclusion}
+The performance of the 1p 2p and 3p Tau Identification networks was presented, both in terms of overall background rejection and in rejection across the spectrum of $p_t$ and $\mu$. 
+Using an RNN Architecture, with the same variable set as the 3p Network as defined in table [\ref{tab:tauid_net_vars_table}] above , and a data set containing exclusively 2p jet objects, I trained a 2p network that was able to show a significant increase in background rejection throughout the entire range of signal efficiency when compared to the 3 prong Inclusive Network. Specifics on the amount of data used to train this network are given in section \ref{Training the Networks} "Training the Networks"
+\end{document}
